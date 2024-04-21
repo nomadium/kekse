@@ -41,10 +41,7 @@ helpers do
     return false unless signature
     return false unless signature.components.include?("x-foo")
 
-    # XXX: to-do: remove metadata
-    metadata = {"method" => request.request_method, "path" => request.path_info, "host" => request.authority}
-    message = Linzer::Message.new(headers: request_headers, http: metadata)
-    # message = Linzer::Message.new(request)
+    message = Linzer::Message.new(request)
     Linzer.verify(pubkey, message, signature)
   rescue Linzer::Error => _error
     # puts error.message # XXX: use a logger for this

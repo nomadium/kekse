@@ -35,13 +35,10 @@ RSpec.describe "Kekse service" do
     end
 
     let(:headers) { {"x-foo" => "bar", "date" => Time.now.to_s} }
-    # XXX: to-do: remove metadata
-    let(:metadata) do
-      {"method" => "GET", "host" => "localhost:9292", "path" => "/role"}
-    end
 
     it "should succeed on /role GET request" do
-      message = Linzer::Message.new(headers: headers, http: metadata)
+      request = Linzer.new_request(:get, "/role", {}, headers)
+      message = Linzer::Message.new(request)
       fields = %w[x-foo date @method]
 
       signature = Linzer.sign(key, message, fields)
@@ -61,13 +58,10 @@ RSpec.describe "Kekse service" do
     end
 
     let(:headers) { {"x-foo" => "bar", "user-agent" => "Ruby"} }
-    # XXX: to-do: remove metadata
-    let(:metadata) do
-      {"method" => "GET", "host" => "localhost:9292", "path" => "/role"}
-    end
 
     it "should fail with 401 on /role GET request" do
-      message = Linzer::Message.new(headers: headers, http: metadata)
+      request = Linzer.new_request(:get, "/role", {}, headers)
+      message = Linzer::Message.new(request)
       fields = %w[x-foo user-agent @method]
 
       signature = Linzer.sign(invalid_key, message, fields)
