@@ -1,0 +1,16 @@
+# let's create a layer with all deps instead of doing this
+
+sudo yum groupinstall "Development Tools"
+sudo yum install openssl-devel
+sudo yum install git ruby
+sudo yum install ruby-devel
+git clone https://github.com/nomadium/kekse
+git checkout --track origin/play
+bundle config set --local path 'vendor/bundle' && bundle install
+rm -rf ../.bundle
+rm -rf .bundle vendor Gemfile.lock 
+bundle config set --local path 'vendor/bundle' && bundle install
+zip -r my_deployment_package.zip lambda_function.rb vendor app
+
+
+packaging/deployment: https://docs.aws.amazon.com/lambda/latest/dg/ruby-package.html#ruby-package-dependencies
