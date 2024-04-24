@@ -53,4 +53,8 @@ helpers do
   def unauthorized?
     require_authorization? && !authorized?
   end
+
+  def unauthorized_error
+    [401, {}, "<h1>Unauthorized</h1>"]
+  end
 end
