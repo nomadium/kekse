@@ -5,7 +5,7 @@ require "linzer"
 require_relative "helpers"
 
 before do
-  halt *unauthorized_error if unauthorized?
+  halt(*unauthorized_error) if unauthorized?
 end
 
 get "/hello" do

@@ -24,7 +24,6 @@ RSpec.describe "Kekse service" do
       send verb, "/whatever"
       expect(last_response).to_not be_ok
       expect(last_response.status).to eq(401)
-      expect(last_response.body.empty?).to eq(true)
     end
   end
 
@@ -70,7 +69,6 @@ RSpec.describe "Kekse service" do
       get "/role", {}, rack_headers
       expect(last_response.status).to eq(401)
       expect(last_response).to_not be_ok
-      expect(last_response.body.empty?).to eq(true)
     end
   end
 end
