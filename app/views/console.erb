@@ -1,0 +1,17 @@
+<h1>Console access</h1>
+
+<form action="/console" method="post">
+  <ul>
+    <li>
+      <label for="signature">Signature:</label>
+      <textarea id="signature" name="user_signature"></textarea>
+    </li>
+    <li>
+      <label for="challenge">Challenge:</label>
+      <input type="text" name="challenge" value="<%= challenge %>" readonly>
+    </li>
+    <li class="button">
+      <button type="submit">Send</button>
+    </li>
+  </ul>
+</form>

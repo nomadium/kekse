@@ -1,5 +1,7 @@
 require "base64"
 require "linzer"
+require "securerandom"
+require "time"
 
 helpers do
   def reject
@@ -8,6 +10,10 @@ helpers do
 
   def title
     "Kekse"
+  end
+
+  def console_challenge
+    "#{SecureRandom.base64(16)}-#{Time.now.iso8601}"
   end
 
   def pubkey
@@ -19,7 +25,8 @@ helpers do
   end
 
   def require_authorization?
-    request.path_info != "/hello"
+    return false if request.path_info == "/console"
+    request.path_info != "/hello" || !request.get?
   end
 
   def request_headers

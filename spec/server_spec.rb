@@ -19,6 +19,21 @@ RSpec.describe "Kekse service" do
       expect(last_response.body).to match(/Hello/)
     end
 
+    it "should succeed on /console GET request" do
+      get "/console"
+      expect(last_response).to        be_ok
+      expect(last_response.status).to eq(200)
+      expect(last_response.body).to   match(/Console access/)
+    end
+
+    it "foo" do
+      get "/console", {}, "CONTENT_TYPE" => "application/json"
+      binding.irb
+      post "/console", form_data
+      expect(last_response.status).to eq(200)
+      expect(last_response.body).to   eq("signed")
+    end
+
     it "should fail with 401 on any other request type and URL" do
       verb = %i[get post put patch delete options head].sample
       send verb, "/whatever"
