@@ -1,7 +1,6 @@
 require "base64"
 require "linzer"
 require "securerandom"
-require "time"
 
 helpers do
   def reject
@@ -13,7 +12,7 @@ helpers do
   end
 
   def console_challenge
-    "#{SecureRandom.base64(16)}-#{Time.now.iso8601}"
+    "#{SecureRandom.base64(16)}-#{Time.now.to_i}"
   end
 
   def pubkey

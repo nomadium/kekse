@@ -27,6 +27,10 @@ post "/console" do
   halt 400 if %w[challenge user_signature].any? { |p| !request.params.key?(p) }
 
   message       = request.params["challenge"]
+  # challenge should be validated:
+  # it has the expected format
+  # it cannot be replayed
+  # expires after 5 mins
   ssh_signature = request.params["user_signature"]
 
   signature = SSHData::Signature.parse_pem(Base64.decode64(ssh_signature))
