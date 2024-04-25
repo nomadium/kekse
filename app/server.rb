@@ -39,4 +39,9 @@ post "/console" do
   halt 400 unless signature.verify(message)
 
   "signed"
+  # once we know the message is signed:
+  # generate a random 256 bits value (or 512)
+  # fetch credentials and store them in a key with the random value
+  # send url with the random value to a sns topic
+  # if link clicked, redirect to console
 end
