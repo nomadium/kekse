@@ -1,6 +1,10 @@
 require "base64"
 
 helpers do
+  def reject
+    halt(*unauthorized_error)
+  end
+
   def pubkey
     pubkey_material = ENV["PUBKEY"]
     return nil if pubkey_material.nil?
