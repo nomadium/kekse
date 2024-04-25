@@ -3,7 +3,7 @@ require "sinatra"
 require_relative "helpers"
 
 before do
-  reject if unauthorized?
+  reject 401, :unauthorized if unauthorized?
 end
 
 get "/hello" do
@@ -11,5 +11,6 @@ get "/hello" do
 end
 
 get "/role" do
+  # reject 400, :bad_request if some_error?
   "protected"
 end

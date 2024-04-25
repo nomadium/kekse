@@ -2,8 +2,8 @@ require "base64"
 require "linzer"
 
 helpers do
-  def reject
-    halt(*unauthorized_error)
+  def reject(code, error, headers = {})
+    halt [code, headers, (erb error)]
   end
 
   def title
@@ -61,9 +61,5 @@ helpers do
 
   def unauthorized?
     require_authorization? && !authorized?
-  end
-
-  def unauthorized_error
-    [401, {}, (erb :unauthorized)]
   end
 end
