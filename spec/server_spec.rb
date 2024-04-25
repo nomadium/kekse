@@ -15,15 +15,20 @@ RSpec.describe "Kekse service" do
   context "without credentials" do
     it "should succeed on /hello GET request" do
       get "/hello"
-      expect(last_response).to be_ok
-      expect(last_response.body).to eq("hello")
+      expect(last_response).to      be_ok
+      expect(last_response.body).to match(/Hello/)
     end
 
     it "should fail with 401 on any other request type and URL" do
       verb = %i[get post put patch delete options head].sample
       send verb, "/whatever"
-      expect(last_response).to_not be_ok
-      expect(last_response.status).to eq(401)
+      expect(last_response).to_not           be_ok
+      expect(last_response.status).to        eq(401)
+      if last_request.head?
+        expect(last_response.body.empty?).to eq(true)
+      else
+        expect(last_response.body).to        match(/Unauthorized/)
+      end
     end
   end
 
@@ -45,8 +50,8 @@ RSpec.describe "Kekse service" do
 
       get "/role", {}, rack_headers
       expect(last_response.status).to eq(200)
-      expect(last_response).to be_ok
-      expect(last_response.body).to eq("protected")
+      expect(last_response).to        be_ok
+      expect(last_response.body).to   eq("protected")
     end
   end
 
@@ -68,7 +73,8 @@ RSpec.describe "Kekse service" do
 
       get "/role", {}, rack_headers
       expect(last_response.status).to eq(401)
-      expect(last_response).to_not be_ok
+      expect(last_response).to_not    be_ok
+      expect(last_response.body).to   match(/Unauthorized/)
     end
   end
 end

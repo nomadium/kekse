@@ -6,6 +6,10 @@ helpers do
     halt(*unauthorized_error)
   end
 
+  def title
+    "Kekse"
+  end
+
   def pubkey
     pubkey_material = ENV["PUBKEY"]
     return nil if pubkey_material.nil?
@@ -60,6 +64,6 @@ helpers do
   end
 
   def unauthorized_error
-    [401, {}, "<h1>Unauthorized</h1>"]
+    [401, {}, (erb :unauthorized)]
   end
 end

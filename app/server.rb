@@ -7,7 +7,7 @@ before do
 end
 
 get "/hello" do
-  "hello"
+  erb :hello
 end
 
 get "/role" do
