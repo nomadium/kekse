@@ -1,6 +1,4 @@
 require "sinatra"
-require "base64"
-require "linzer"
 
 require_relative "helpers"
 
