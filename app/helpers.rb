@@ -1,10 +1,14 @@
 require "base64"
 require "linzer"
-require "securerandom"
+require_relative "models"
 
 helpers do
   def reject
     halt(*unauthorized_error)
+  end
+
+  def reject_with(error)
+    halt(*(send error))
   end
 
   def title
@@ -12,7 +16,12 @@ helpers do
   end
 
   def console_challenge
-    "#{SecureRandom.base64(16)}-#{Time.now.to_i}"
+    Kekse::Challenge.new
+  end
+
+  def console_access_signature(message, raw_signature)
+    # Kekse::Challenge::Signature.new(message, signature)
+    Kekse::Challenge::Signature.build(message, raw_signature)
   end
 
   def pubkey
@@ -71,5 +80,9 @@ helpers do
 
   def unauthorized_error
     [401, {}, (erb :unauthorized)]
+  end
+
+  def bad_request
+    [400, {}, (erb :bad_request)]
   end
 end
