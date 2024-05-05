@@ -6,6 +6,23 @@ require "linzer"
 
 ENV["PUBKEY"] = "/NRYfVPJ9ca84wgoNeo/oppjg1Ko6SHpKLh0Z5RpiPY="
 
+def to_pem(version, public_key, namespace, reserved, digest, signature)
+  blob =
+    SSHData::Signature::SIGNATURE_PREAMBLE      +
+    SSHData::Encoding.encode_uint32(version)    +
+    SSHData::Encoding.encode_string(public_key) +
+    SSHData::Encoding.encode_string(namespace)  +
+    SSHData::Encoding.encode_string(reserved)   +
+    SSHData::Encoding.encode_string(digest)     +
+    SSHData::Encoding.encode_string(signature)
+
+  pem = +""
+  pem << "-----BEGIN SSH SIGNATURE-----\n"
+  pem << Base64.encode64(blob)
+  pem << "-----END SSH SIGNATURE-----"
+  pem
+end
+
 def to_rack_headers(headers)
   headers.transform_keys! { |k| "HTTP_" + k.upcase.tr("-", "_") }
 end
@@ -107,6 +124,31 @@ RSpec.describe "Kekse service" do
       expect(last_response.body).to   match(/Bad Request/)
     end
 
+    it "something" do
+      challenge = Kekse::Challenge.new
+      key = SSHData::PrivateKey::ED25519.generate
+      signed_data = (SSHData::Signature::SIGNATURE_PREAMBLE + SSHData::Encoding.encode_string("file") + SSHData::Encoding.encode_string("") + SSHData::Encoding.encode_string("sha512") + SSHData::Encoding.encode_string(Digest::SHA512.digest(challenge.to_s)))
+      inner_signature = key.sign(signed_data)
+      public_key = (SSHData::Encoding.encode_string(key.public_key.algo) + SSHData::Encoding.encode_string(key.public_key.pk))
+      signature = SSHData::Signature.new(sigversion: 1, publickey: public_key, namespace: "file", reserved: "", signature: inner_signature, hash_algorithm: "sha512")
+      # signature.verify(challenge.to_s) # => true
+
+      # signature from scratch
+      test_signature = SSHData::Signature.parse_pem("-----BEGIN SSH SIGNATURE-----\n" + Base64.encode64(SSHData::Signature::SIGNATURE_PREAMBLE + SSHData::Encoding.encode_uint32(1) + SSHData::Encoding.encode_string(public_key) + SSHData::Encoding.encode_string("file") + SSHData::Encoding.encode_string("") + SSHData::Encoding.encode_string("sha512") + SSHData::Encoding.encode_string(inner_signature)).encode(Encoding::ASCII_8BIT) + "-----END SSH SIGNATURE-----")
+
+      test2 = to_pem(1, public_key, "file", "", "sha512", inner_signature)
+      binding.irb
+
+      pem_encoded_ssh_signature = <<~SIG
+        -----BEGIN SSH SIGNATURE-----
+        U1NIU0lHAAAAAQAAADMAAAALc3NoLWVkMjU1MTkAAAAgnTE8/uaUtQYW4RjNzcJdu0LP74
+        goqlHiLItn+sB1aqIAAAAEZmlsZQAAAAAAAAAGc2hhNTEyAAAAUwAAAAtzc2gtZWQyNTUx
+        OQAAAECUgAcpR5OrC+GaeeU2p/QfqyBFSMJl+dUWKJRhj0pVl0X+sXf3MBd9uQ+zy4m7mC
+        ws82uT7jWyAZWMlAp3+okI
+        -----END SSH SIGNATURE-----
+      SIG
+      binding.irb
+    end
     # fix
     # create a new challenge
     # create a new key

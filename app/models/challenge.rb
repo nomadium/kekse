@@ -40,7 +40,13 @@ module Kekse
       end
 
       def valid_signature?
-        known_key? && ssh_signature.verify(message.to_s)
+        # known_key? && ssh_signature.verify(message.to_s)
+        return false if !ssh_signature
+        ssh_signature.verify(message.to_s)
+      end
+
+      def public_key
+        valid_signature? ? ssh_signature.public_key : nil
       end
 
       def known_key?
