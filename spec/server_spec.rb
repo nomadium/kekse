@@ -107,6 +107,11 @@ RSpec.describe "Kekse service" do
       expect(last_response.body).to   match(/Bad Request/)
     end
 
+    # fix
+    # create a new challenge
+    # create a new key
+    # add key to app
+    # sign challenge with key
     it "should succeed with a good signature from known key" do
       # payload = SecureRandom.base64(16)
       # binding.irb
@@ -142,6 +147,11 @@ RSpec.describe "Kekse service" do
       expect(last_response.body).to   eq("signed")
     end
 
+    # fix
+    # create a new challenge
+    # create a new key
+    # add key to app
+    # sign random data with key
     it "should fail with a good signature from known key but wrong message" do
       raw_challenge = "Y2hhbGxlbmdlLWtLdVYwYkpMNmNIMW13ZThpOXBsUnc9PS0xNzE0ODYwNDE1"
       pem_encoded_ssh_signature = <<~SIG
@@ -160,6 +170,10 @@ RSpec.describe "Kekse service" do
       expect(last_response.body).to   match(/Bad Request/)
     end
 
+    # fix
+    # create a new challenge
+    # create a new key
+    # sign challenge with key
     it "should fail with a signature from unknown key and right message" do
       raw_challenge = "Y2hhbGxlbmdlLWtLdVYwYkpMNmNIMW13ZThpOXBsUnc9PS0xNzE0ODYwNDE1"
       pem_encoded_ssh_signature = <<~SIG

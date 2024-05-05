@@ -20,7 +20,6 @@ helpers do
   end
 
   def console_access_signature(message, raw_signature)
-    # Kekse::Challenge::Signature.new(message, signature)
     Kekse::Challenge::Signature.build(message, raw_signature)
   end
 
