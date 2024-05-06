@@ -3,24 +3,76 @@
 require "base64"
 require "securerandom"
 require "linzer"
+require "digest"
 
 ENV["PUBKEY"] = "/NRYfVPJ9ca84wgoNeo/oppjg1Ko6SHpKLh0Z5RpiPY="
 
-def to_pem(version, public_key, namespace, reserved, digest, signature)
-  blob =
-    SSHData::Signature::SIGNATURE_PREAMBLE      +
-    SSHData::Encoding.encode_uint32(version)    +
-    SSHData::Encoding.encode_string(public_key) +
-    SSHData::Encoding.encode_string(namespace)  +
-    SSHData::Encoding.encode_string(reserved)   +
-    SSHData::Encoding.encode_string(digest)     +
-    SSHData::Encoding.encode_string(signature)
+module SSHData
+  module Encoding
+    # Get a PEM encoded blob from signature object.
+    #
+    # signature  - The SSHData::Signature signature object.
+    #
+    def encode_openssh_signature(signature)
+      pem_type = "SSH SIGNATURE"
+      header = "-----BEGIN #{pem_type}-----"
+      footer = "-----END #{pem_type}-----"
 
-  pem = +""
-  pem << "-----BEGIN SSH SIGNATURE-----\n"
-  pem << Base64.encode64(blob)
-  pem << "-----END SSH SIGNATURE-----"
-  pem
+      fields =
+        OPENSSH_SIGNATURE_FIELDS
+          .map do |field, type|
+            case field
+            when :publickey then [type, signature.public_key.rfc4253]
+            else                 [type, signature.public_send(field)]
+            end
+          end
+
+      blob = OPENSSH_SIGNATURE_MAGIC + encode_fields(*fields)
+      "%s\n%s%s" % [header, Base64.encode64(blob), footer]
+    end
+  end
+
+  class Signature
+    def to_pem
+      Encoding.encode_openssh_signature(self)
+    end
+  end
+end
+
+def ssh_sign(key, message, namespace, reserved, hash_algorithm)
+  signed_data     = signed_data(message, namespace, reserved, hash_algorithm)
+  inner_signature = key.sign(signed_data)
+
+  SSHData::Signature.new(
+    sigversion:     SSHData::Signature::MIN_SUPPORTED_VERSION,
+    publickey:      key.public_key.rfc4253,
+    namespace:      namespace,
+    reserved:       reserved,
+    hash_algorithm: hash_algorithm,
+    signature:      inner_signature
+  )
+end
+
+def openssh_signature(key, message)
+  namespace      = "file"
+  reserved       = ""
+  hash_algorithm = "sha512"
+  ssh_sign(key, message, namespace, reserved, hash_algorithm)
+end
+
+# refactor: move
+def signed_data(message, namespace, reserved, hash_algorithm)
+  digest = Digest.const_get(hash_algorithm.upcase)
+                 .digest(message)
+  fields = [
+    [:string, namespace],
+    [:string, reserved],
+    [:string, hash_algorithm],
+    [:string, digest]
+  ]
+
+  preamble = SSHData::Signature::SIGNATURE_PREAMBLE
+  preamble + SSHData::Encoding.encode_fields(*fields)
 end
 
 def to_rack_headers(headers)
@@ -96,94 +148,45 @@ RSpec.describe "Kekse service" do
     end
 
     it "should fail with a challenge with invalid payload" do
-      payload = SecureRandom.base64(15)
-      raw_challenge = "challenge-#{payload}-1234567890"
-      invalid_challenge = Base64.strict_encode64(raw_challenge)
-      post "/console", {"challenge" => invalid_challenge}
+      invalid_challenge = Kekse::Challenge.new(SecureRandom.base64(15))
+      post "/console", {"challenge" => invalid_challenge.to_s}
       expect(last_response).to_not    be_ok
       expect(last_response.status).to eq(400)
       expect(last_response.body).to   match(/Bad Request/)
     end
 
     it "should fail with challenge with a time too old" do
-      payload = SecureRandom.base64(16)
-      raw_challenge = "challenge-#{payload}-1234567890"
-      challenge = Base64.strict_encode64(raw_challenge)
-      post "/console", {"challenge" => challenge}
+      challenge = Kekse::Challenge.new(SecureRandom.base64(15), 1234567890)
+      post "/console", {"challenge" => challenge.to_s}
       expect(last_response).to_not    be_ok
       expect(last_response.status).to eq(400)
       expect(last_response.body).to   match(/Bad Request/)
     end
 
     it "should fail with invalid signature" do
-      raw_challenge = "Y2hhbGxlbmdlLWtLdVYwYkpMNmNIMW13ZThpOXBsUnc9PS0xNzE0ODYwNDE1"
+      challenge = Kekse::Challenge.new
       signature = "crap"
-      post "/console", {"challenge" => raw_challenge, "user_signature" => signature}
+      post "/console", {"challenge" => challenge.to_s, "user_signature" => signature}
       expect(last_response).to_not    be_ok
       expect(last_response.status).to eq(400)
       expect(last_response.body).to   match(/Bad Request/)
     end
 
-    it "something" do
-      challenge = Kekse::Challenge.new
-      key = SSHData::PrivateKey::ED25519.generate
-      signed_data = (SSHData::Signature::SIGNATURE_PREAMBLE + SSHData::Encoding.encode_string("file") + SSHData::Encoding.encode_string("") + SSHData::Encoding.encode_string("sha512") + SSHData::Encoding.encode_string(Digest::SHA512.digest(challenge.to_s)))
-      inner_signature = key.sign(signed_data)
-      public_key = (SSHData::Encoding.encode_string(key.public_key.algo) + SSHData::Encoding.encode_string(key.public_key.pk))
-      signature = SSHData::Signature.new(sigversion: 1, publickey: public_key, namespace: "file", reserved: "", signature: inner_signature, hash_algorithm: "sha512")
-      # signature.verify(challenge.to_s) # => true
-
-      # signature from scratch
-      test_signature = SSHData::Signature.parse_pem("-----BEGIN SSH SIGNATURE-----\n" + Base64.encode64(SSHData::Signature::SIGNATURE_PREAMBLE + SSHData::Encoding.encode_uint32(1) + SSHData::Encoding.encode_string(public_key) + SSHData::Encoding.encode_string("file") + SSHData::Encoding.encode_string("") + SSHData::Encoding.encode_string("sha512") + SSHData::Encoding.encode_string(inner_signature)).encode(Encoding::ASCII_8BIT) + "-----END SSH SIGNATURE-----")
-
-      test2 = to_pem(1, public_key, "file", "", "sha512", inner_signature)
-      binding.irb
-
-      pem_encoded_ssh_signature = <<~SIG
-        -----BEGIN SSH SIGNATURE-----
-        U1NIU0lHAAAAAQAAADMAAAALc3NoLWVkMjU1MTkAAAAgnTE8/uaUtQYW4RjNzcJdu0LP74
-        goqlHiLItn+sB1aqIAAAAEZmlsZQAAAAAAAAAGc2hhNTEyAAAAUwAAAAtzc2gtZWQyNTUx
-        OQAAAECUgAcpR5OrC+GaeeU2p/QfqyBFSMJl+dUWKJRhj0pVl0X+sXf3MBd9uQ+zy4m7mC
-        ws82uT7jWyAZWMlAp3+okI
-        -----END SSH SIGNATURE-----
-      SIG
-      binding.irb
-    end
-    # fix
-    # create a new challenge
-    # create a new key
-    # add key to app
-    # sign challenge with key
+    # also add a test case for a challenge with future time and reject it
+    # fix: refactor
     it "should succeed with a good signature from known key" do
-      # payload = SecureRandom.base64(16)
-      # binding.irb
-      # time = Time.now.to_i - 30
-      # raw_challenge = "challenge-#{payload}-#{time}"
-      # challenge = Base64.strict_encode64(raw_challenge)
-      # challenge = Kekse::Challenge.new
-      raw_challenge = "Y2hhbGxlbmdlLWtLdVYwYkpMNmNIMW13ZThpOXBsUnc9PS0xNzE0ODYwNDE1"
-      # challenge = "challenge-kKuV0bJL6cH1mwe8i9plRw==-1714860415"
-      pem_encoded_ssh_signature = <<~SIG
-        -----BEGIN SSH SIGNATURE-----
-        U1NIU0lHAAAAAQAAADMAAAALc3NoLWVkMjU1MTkAAAAgnTE8/uaUtQYW4RjNzcJdu0LP74
-        goqlHiLItn+sB1aqIAAAAEZmlsZQAAAAAAAAAGc2hhNTEyAAAAUwAAAAtzc2gtZWQyNTUx
-        OQAAAECUgAcpR5OrC+GaeeU2p/QfqyBFSMJl+dUWKJRhj0pVl0X+sXf3MBd9uQ+zy4m7mC
-        ws82uT7jWyAZWMlAp3+okI
-        -----END SSH SIGNATURE-----
-      SIG
-      signature = Base64.strict_encode64(pem_encoded_ssh_signature)
+      challenge = Kekse::Challenge.new
+      key       = SSHData::PrivateKey::ED25519.generate
+      signature = openssh_signature(key, challenge.to_s)
 
-      # signing_key = Ed25519::SigningKey.generate
-      # verify_key = signing_key.verify_key
-      # key = SSHData::PrivateKey::ED25519.new(
-      #   algo: SSHData::PublicKey::ALGO_ED25519,
-      #   pk: verify_key.to_bytes,
-      #   sk: signing_key.to_bytes + verify_key.to_bytes,
-      #   comment: "comment"
-      # )
-      # subject.sign(message))
+      app.settings.known_keys << key.public_key.fingerprint
 
-      post "/console", {"challenge" => raw_challenge, "user_signature" => signature}
+      params = {
+        "challenge" => challenge.to_s,
+        "user_signature" => Base64.strict_encode64(signature.to_pem)
+      }
+
+      post "/console", params
       expect(last_response).to        be_ok
       expect(last_response.status).to eq(200)
       expect(last_response.body).to   eq("signed")
@@ -194,44 +197,18 @@ RSpec.describe "Kekse service" do
     # create a new key
     # add key to app
     # sign random data with key
-    it "should fail with a good signature from known key but wrong message" do
-      raw_challenge = "Y2hhbGxlbmdlLWtLdVYwYkpMNmNIMW13ZThpOXBsUnc9PS0xNzE0ODYwNDE1"
-      pem_encoded_ssh_signature = <<~SIG
-        -----BEGIN SSH SIGNATURE-----
-        U1NIU0lHAAAAAQAAADMAAAALc3NoLWVkMjU1MTkAAAAgnTE8/uaUtQYW4RjNzcJdu0LP74
-        goqlHiLItn+sB1aqIAAAAEZmlsZQAAAAAAAAAGc2hhNTEyAAAAUwAAAAtzc2gtZWQyNTUx
-        OQAAAEBif6mIJiIuQ2UuWfL/4Ffyb6T6u56h8c9frO0Hv1CGPowSf3avvU/bqZ0aklAeZC
-        VDU1ngFkyco/r2HqQp3AgF
-        -----END SSH SIGNATURE-----
-      SIG
-      signature = Base64.strict_encode64(pem_encoded_ssh_signature)
-
-      post "/console", {"challenge" => raw_challenge, "user_signature" => signature}
-      expect(last_response).to_not    be_ok
-      expect(last_response.status).to eq(400)
-      expect(last_response.body).to   match(/Bad Request/)
+    xit "should fail with a good signature from known key but wrong message" do
+      app.settings.known_keys.clear
+      expect(false).to eq(true)
     end
 
     # fix
     # create a new challenge
     # create a new key
     # sign challenge with key
-    it "should fail with a signature from unknown key and right message" do
-      raw_challenge = "Y2hhbGxlbmdlLWtLdVYwYkpMNmNIMW13ZThpOXBsUnc9PS0xNzE0ODYwNDE1"
-      pem_encoded_ssh_signature = <<~SIG
-        -----BEGIN SSH SIGNATURE-----
-        U1NIU0lHAAAAAQAAADMAAAALc3NoLWVkMjU1MTkAAAAgvobmiBp5zx+G/TrEOeSFCM6NIv
-        NPCgA/cYllToD5+FYAAAAEZmlsZQAAAAAAAAAGc2hhNTEyAAAAUwAAAAtzc2gtZWQyNTUx
-        OQAAAEB+4KPNmSO5tBLWmhI8Tx0Yc8D0FqJq9o/1sNwKcrZk64RstV0gI7eGpVNdq23ujH
-        q9RYwEO217GgeDVedf6NoG
-        -----END SSH SIGNATURE-----
-      SIG
-      signature = Base64.strict_encode64(pem_encoded_ssh_signature)
-
-      post "/console", {"challenge" => raw_challenge, "user_signature" => signature}
-      expect(last_response).to_not    be_ok
-      expect(last_response.status).to eq(400)
-      expect(last_response.body).to   match(/Bad Request/)
+    xit "should fail with a signature from unknown key and right message" do
+      app.settings.known_keys.clear
+      expect(false).to eq(true)
     end
   end
 

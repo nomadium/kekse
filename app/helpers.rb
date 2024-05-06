@@ -23,6 +23,10 @@ helpers do
     Kekse::Challenge::Signature.build(message, raw_signature)
   end
 
+  def unknown?(public_key)
+    public_key.nil? || !settings.known_keys.include?(public_key.fingerprint)
+  end
+
   def pubkey
     pubkey_material = ENV["PUBKEY"]
     return nil if pubkey_material.nil?

@@ -4,6 +4,7 @@ require "ssh_data"
 require_relative "helpers"
 
 set :foofoo, true
+set :known_keys, %w[]
 
 before do
   reject if unauthorized?
@@ -29,7 +30,7 @@ post "/console" do
   ssh_signature = console_access_signature(challenge, raw_signature)
   public_key    = ssh_signature.public_key
 
-  reject_with :bad_request if ssh_signature.invalid? #|| unknown?(public_key)
+  reject_with :bad_request if ssh_signature.invalid? || unknown?(public_key)
   "signed"
 
   # result = federate

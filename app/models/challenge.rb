@@ -25,8 +25,7 @@ module Kekse
       end
 
       def message_expected_format?
-        # message_length == 16 && Time.now.to_i - message.time <= 5 * 60
-        message_length == 16 && Time.now.to_i - message.time <= 100000
+        message_length == 16 && Time.now.to_i - message.time <= 5 * 60
       end
 
       def message_length
@@ -40,19 +39,12 @@ module Kekse
       end
 
       def valid_signature?
-        # known_key? && ssh_signature.verify(message.to_s)
         return false if !ssh_signature
         ssh_signature.verify(message.to_s)
       end
 
       def public_key
-        valid_signature? ? ssh_signature.public_key : nil
-      end
-
-      def known_key?
-        return false if !ssh_signature
-        fingerprint = "ZDtwx65wb2PwVnZfHjIIS9TbtmDw+yg+YJ+Kqzfwf2w"
-        ssh_signature.public_key.fingerprint == fingerprint
+        invalid? ? nil : ssh_signature.public_key
       end
 
       def invalid?
