@@ -7,10 +7,12 @@ ignore:
     - Layout/ExtraSpacing
   - 'app/**':
     - Layout/ExtraSpacing
+    - Layout/HashAlignment
   - 'app/*/**':
     - Layout/ExtraSpacing
   - 'spec/**':
     - Layout/ExtraSpacing
+    - Layout/HashAlignment
   - 'lambda_function.rb':
     - Style/GlobalVars
     - Layout/ArgumentAlignment

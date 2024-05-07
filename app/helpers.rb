@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require "base64"
 require "linzer"
 require_relative "models"

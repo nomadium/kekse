@@ -1,9 +1,10 @@
+# frozen_string_literal: true
+
 require "sinatra"
 require "ssh_data"
 
 require_relative "helpers"
 
-set :foofoo, true
 set :known_keys, %w[]
 
 before do
@@ -11,7 +12,6 @@ before do
 end
 
 get "/hello" do
-  puts settings.foofoo
   erb :hello
 end
 
