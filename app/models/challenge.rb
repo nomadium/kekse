@@ -2,6 +2,7 @@
 
 require "securerandom"
 require "base64"
+require "ssh_data"
 
 module Kekse
   class Challenge
@@ -41,7 +42,9 @@ module Kekse
       end
 
       def ssh_signature
-        @ssh_signature ||= SSHData::Signature.parse_pem(Base64.decode64(bytes))
+        pem = Base64.decode64(bytes)
+        return nil if pem.empty?
+        @ssh_signature ||= SSHData::Signature.parse_pem(pem)
       rescue SSHData::DecodeError
         nil
       end
