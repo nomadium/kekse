@@ -1,0 +1,10 @@
+<h1>Roles</h1>
+<h2>Account: <%= account_id %></h2>
+<ul>
+<% roles.each do |r| %>
+  <% role_link = "/console/role/#{r.role_name}?signature=#{signature}" %>
+  <li>
+    <a href="<%= role_link %>"><%= r.role_name %></a>
+  </li>
+<% end %>
+</ul>

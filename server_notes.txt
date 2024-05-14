@@ -1,0 +1,130 @@
+# frozen_string_literal: true
+
+require "sinatra"
+require "cgi"
+require "open-uri"
+require "digest"
+
+require_relative "aws"
+require_relative "helpers"
+
+# set :known_keys, %w[ZDtwx65wb2PwVnZfHjIIS9TbtmDw+yg+YJ+Kqzfwf2w]
+set :known_keys, %w[]
+set :iam, Kekse::Aws.iam_stub_client
+set :sts, Kekse::Aws.sts_stub_client
+set :data_store, {} # delete this, it should be dynamo
+
+before do
+  reject if unauthorized?
+end
+
+get "/hello" do
+  erb :hello
+end
+
+get "/role" do
+  "protected"
+end
+
+get "/console" do
+  # binding.irb
+  erb :console, locals: {challenge: console_challenge.to_s}
+end
+
+post "/console" do
+  challenge     = request.params["challenge"]
+  raw_signature = request.params["user_signature"]
+  ssh_signature = console_access_signature(challenge, raw_signature)
+  public_key    = ssh_signature.public_key
+
+  reject_with :bad_request if ssh_signature.invalid? || unknown?(public_key)
+
+  iam_roles = list_assumable_iam_roles
+  signature_id = Digest::SHA512.hexdigest(raw_signature)
+  settings.data_store[signature_id] = [false]
+
+  vars = {account_id: aws_account_id, roles: iam_roles, signature: signature_id}
+  erb :console_roles, locals: vars
+end
+
+# GET /console/role/foo?signature=sha512(raw_signature)
+# if signature found in db ? render template with button : bad request
+get "/console/role/:name" do
+  puts params["signature"]
+  "Hello " + params["name"]
+end
+
+  # post "/console/role/:name" do
+  # if signature found in db ? drop it : bad request
+  # if get role ? show role, assume role, federate, send link to sns, put note
+  # else bad request
+  # end
+
+  # aws_credentials = Aws::Credentials.new("foo", "bar", "baz")
+  # federated_access_aws_console(aws_credentials)
+  # "signed"
+  # sts = Aws::STS::Client.new
+  # sts.get_caller_identity
+  # sts.config.region # => "eu-west-1"
+
+# https://rb.gy/es157n
+#   access = federated_access_aws_console(aws_credentials)
+#   if access.successful? # redirect and send
+#     notify access.login_url # redirect and send
+#   else
+#     # reject_with :bad_request if access.something?
+#     # reject_with :something if access.something?
+#     "error"
+#   end
+#
+#   # "signed"
+#   ENV.to_h.to_s
+#   # sts = Aws::STS::Client.new
+#   # response = sts.get_caller_identity
+#   # response.to_s
+#
+#   issuer_url = "http://localhost:9292/console"
+#   console_url = "https://console.aws.amazon.com/ec2"
+#   signin_url = "https://signin.aws.amazon.com/federation"
+#
+#   session_json = {
+#     :sessionId => ENV["AWS_ACCESS_KEY_ID"],
+#     :sessionKey => ENV["AWS_SECRET_ACCESS_KEY"],
+#     :sessionToken => ENV["AWS_SESSION_TOKEN"],
+#   }.to_json
+#
+#   get_signin_token_url = signin_url + 
+#                        "?Action=getSigninToken" + 
+#                        "&SessionType=json&Session=" + 
+#                        CGI.escape(session_json)
+#
+#   returned_content = URI.parse(get_signin_token_url).read
+#   puts returned_content
+#
+#   signin_token = JSON.parse(returned_content)['SigninToken']
+#   signin_token_param = "&SigninToken=" + CGI.escape(signin_token)
+#
+#   issuer_param = "&Issuer=" + CGI.escape(issuer_url)
+#   destination_param = "&Destination=" + CGI.escape(console_url)
+#   login_url = signin_url + "?Action=login" + signin_token_param + issuer_param + destination_param
+#
+#   puts login_url
+#   # redirect login_url
+#   "redirect"
+
+# {"SigninToken":"mgabuTQqCQi9oeMcdW3gP7AojgUJCETxSStLvlMu88Rx3YXmkFUL4nIe-tdAq142117plJUkeMJ8aQRBH64TAE1b5nPAyL7p0yEPKUL3QZeDYCpFndigZgh_B4wvIOih0Pu4htDd_uSyRQvjVeSsPGTqg3-PRgAjnAVnXylF1b1zEcE_FFUerQYLCQIP3uID2b8EVW1DCFF9zvbFI3qTDnleUZjmnuX7fLtlAe-TULlxlqFaPKb8bZ9GTpme6bFjiK2KXVWIECMJQrm3Izc3E9kgq8FkBgx6DmjVvZT8_Golv3GMBDDqTSvpCD5kV7X06XFQtqeO5j5SoLtkRzAiVZnb-UKh1xkYC8s6hZJfkRWF5V71fqGSCnE7kbcN6LSaaqvUMT_j1FaAoD9URlmgWSi9FiWx_KI0vFfUuRvGo5laX1FMCwZZDp_GeGMi6Lfgs24RcT5WYube8oMl45QPFMBxdtqip6PIciF0I1f-JwmjWaZX52XZnK7ZXnLkQdxNsxJVLaf9WmrYfKl0Dvei5AF8zWRMuX6emcHJm8FsI4rUeD_i577d-1StgMfJj0CbPko8iNxp0XsAnrOu73ElSsM0rzgoefhNQRCvhkUo-mhz1JYLx_UfFlpaHr-rmjbD7fH14xCL-vmMbBeaNQej1w2y-DydKQa4w9ohWXB59UN4Hoi1dotOrJmGNmhOY8sZ-shvkP3sG5wp1jVmPMPWybzt-_5ZpNeTlx1WQUIhFbyv9Shtlyw_KLdbNqK9nEtcsURUnI0G4gtXll4me3lM4c5Qt94dcSWYM671laivM6dWJcsepCZby5HkOM7tjPSmQt7OpIeMSnwO6kaP9YyLrywQIO42KJkCAwNi0feFpd7BSD0sdNg_NsGgRVNs6Lo3PTjTF6qQTpd_kXudy4hvsM4q-0CxTng4TetoJ7f8j6pVi5WnSVS1QZQSZB1OY2Y5ZypPNY9vPmvBJa-qOLXVJGOHOuGm8wF_GPD1KT5d0XICB-4xQZKejw5pbOiciu9X9e_-2oarC9-7hrOBWd9F_OvP6PprRpEpLIbUsb7A257F8AAKKuJFq5am3-pp5Gly-xQnmUAy098hJu48qrsDKNjsuWh4v7fJrY7P1Bx8C0Ougmqq26FfVRcwhCrYXMFXI5cK_BtEyo3w_aPE5M9XRL-mv_metK0_52Qyy_7NJyC9Yrtx0KffrQTnUNKMVUWWpuQUsyI3CoRkXf4TIe_gf-Uxa_vggG-Y4VG-777uFVHrZRlk3ztfazkzfwy1hyIStgO9Z8rfoLtupiDoom0e9fwoydPwGvplXhiI3cP67MPwNy65z29Shbt-WtLfosC-3Qeb51qNBsufJ9HGHz_ZCWuaRnQJph02I4_LnRuCIgXh6sFQRnH385FkfTBVGmDQ5dYfx8h-yQQc5_hS_OXJSjuVWNRxlzDTaOwOGgvgZIBvN8b4QuMGWbTJfQwU4YMALx_E8JGQjslAvNf1KflVT0_vvSTcJ--lGrSTN9VQ87z9mGNNSS1nJq7vhfd8xe0KXQ"}
+
+# https://signin.aws.amazon.com/federation?Action=login&SigninToken=mgabuTQqCQi9oeMcdW3gP7AojgUJCETxSStLvlMu88Rx3YXmkFUL4nIe-tdAq142117plJUkeMJ8aQRBH64TAE1b5nPAyL7p0yEPKUL3QZeDYCpFndigZgh_B4wvIOih0Pu4htDd_uSyRQvjVeSsPGTqg3-PRgAjnAVnXylF1b1zEcE_FFUerQYLCQIP3uID2b8EVW1DCFF9zvbFI3qTDnleUZjmnuX7fLtlAe-TULlxlqFaPKb8bZ9GTpme6bFjiK2KXVWIECMJQrm3Izc3E9kgq8FkBgx6DmjVvZT8_Golv3GMBDDqTSvpCD5kV7X06XFQtqeO5j5SoLtkRzAiVZnb-UKh1xkYC8s6hZJfkRWF5V71fqGSCnE7kbcN6LSaaqvUMT_j1FaAoD9URlmgWSi9FiWx_KI0vFfUuRvGo5laX1FMCwZZDp_GeGMi6Lfgs24RcT5WYube8oMl45QPFMBxdtqip6PIciF0I1f-JwmjWaZX52XZnK7ZXnLkQdxNsxJVLaf9WmrYfKl0Dvei5AF8zWRMuX6emcHJm8FsI4rUeD_i577d-1StgMfJj0CbPko8iNxp0XsAnrOu73ElSsM0rzgoefhNQRCvhkUo-mhz1JYLx_UfFlpaHr-rmjbD7fH14xCL-vmMbBeaNQej1w2y-DydKQa4w9ohWXB59UN4Hoi1dotOrJmGNmhOY8sZ-shvkP3sG5wp1jVmPMPWybzt-_5ZpNeTlx1WQUIhFbyv9Shtlyw_KLdbNqK9nEtcsURUnI0G4gtXll4me3lM4c5Qt94dcSWYM671laivM6dWJcsepCZby5HkOM7tjPSmQt7OpIeMSnwO6kaP9YyLrywQIO42KJkCAwNi0feFpd7BSD0sdNg_NsGgRVNs6Lo3PTjTF6qQTpd_kXudy4hvsM4q-0CxTng4TetoJ7f8j6pVi5WnSVS1QZQSZB1OY2Y5ZypPNY9vPmvBJa-qOLXVJGOHOuGm8wF_GPD1KT5d0XICB-4xQZKejw5pbOiciu9X9e_-2oarC9-7hrOBWd9F_OvP6PprRpEpLIbUsb7A257F8AAKKuJFq5am3-pp5Gly-xQnmUAy098hJu48qrsDKNjsuWh4v7fJrY7P1Bx8C0Ougmqq26FfVRcwhCrYXMFXI5cK_BtEyo3w_aPE5M9XRL-mv_metK0_52Qyy_7NJyC9Yrtx0KffrQTnUNKMVUWWpuQUsyI3CoRkXf4TIe_gf-Uxa_vggG-Y4VG-777uFVHrZRlk3ztfazkzfwy1hyIStgO9Z8rfoLtupiDoom0e9fwoydPwGvplXhiI3cP67MPwNy65z29Shbt-WtLfosC-3Qeb51qNBsufJ9HGHz_ZCWuaRnQJph02I4_LnRuCIgXh6sFQRnH385FkfTBVGmDQ5dYfx8h-yQQc5_hS_OXJSjuVWNRxlzDTaOwOGgvgZIBvN8b4QuMGWbTJfQwU4YMALx_E8JGQjslAvNf1KflVT0_vvSTcJ--lGrSTN9VQ87z9mGNNSS1nJq7vhfd8xe0KXQ&Issuer=http%3A%2F%2Flocalhost%3A9292%2Fconsole&Destination=https%3A%2F%2Fconsole.aws.amazon.com%2Fsns
+
+  # result = federate
+  # reject_with :bad_request if !result.ok?
+  # redirect federate.url
+  #   "signed"
+  #   # once we know the message is signed:
+  #   # generate a random 256 bits value (or 512)
+  #   # fetch credentials and store them in a key with the random value
+  #   # send url with the random value to a sns topic
+  #   # if link clicked, redirect to console
+# end
+
+# AWS environment: "Hello from Lambda!{\"AWS_LAMBDA_FUNCTION_VERSION\"=>\"$LATEST\", \"AWS_EXECUTION_ENV\"=>\"AWS_Lambda_ruby3.3\", \"AWS_DEFAULT_REGION\"=>\"eu-west-1\", \"AWS_LAMBDA_LOG_STREAM_NAME\"=>\"2024/05/11/[$LATEST]5237902ee630443ebddaab6d2acb03b1\", \"AWS_REGION\"=>\"eu-west-1\", \"PWD\"=>\"/var/task\", \"_HANDLER\"=>\"lambda_function.lambda_handler\", \"TZ\"=>\":UTC\", \"LAMBDA_TASK_ROOT\"=>\"/var/task\", \"LANG\"=>\"en_US.UTF-8\", \"AWS_SECRET_ACCESS_KEY\"=>\"SI8fro83xejZdf3DJbcanQAm5yW7obcFGufO5Q0G\", \"AWS_LAMBDA_LOG_GROUP_NAME\"=>\"/aws/lambda/hey2\", \"AWS_LAMBDA_RUNTIME_API\"=>\"127.0.0.1:9001\", \"AWS_LAMBDA_FUNCTION_MEMORY_SIZE\"=>\"512\", \"LAMBDA_RUNTIME_DIR\"=>\"/var/runtime\", \"GEM_PATH\"=>\"/var/task/vendor/bundle/ruby/3.3.0:/opt/ruby/gems/3.3.0:/var/runtime:/var/runtime/ruby/3.3.0\", \"GEM_HOME\"=>\"/var/runtime\", \"_AWS_XRAY_DAEMON_ADDRESS\"=>\"169.254.79.129\", \"AWS_XRAY_DAEMON_ADDRESS\"=>\"169.254.79.129:2000\", \"SHLVL\"=>\"0\", \"AWS_ACCESS_KEY_ID\"=>\"ASIATE7TPVQLP2XB47YV\", \"LD_LIBRARY_PATH\"=>\"/var/lang/lib:/var/lang/lib:/lib64:/usr/lib64:/var/runtime:/var/runtime/lib:/var/task:/var/task/lib:/opt/lib\", \"AWS_LAMBDA_FUNCTION_NAME\"=>\"hey2\", \"PATH\"=>\"/var/lang/bin:/var/lang/bin:/usr/local/bin:/usr/bin/:/bin:/opt/bin\", \"AWS_LAMBDA_INITIALIZATION_TYPE\"=>\"on-demand\", \"AWS_SESSION_TOKEN\"=>\"IQoJb3JpZ2luX2VjEOD//////////wEaCWV1LXdlc3QtMSJGMEQCIDeMbdjdznZUGQ/cB9luclGCWeqDgvxYSg+E7fJALDBOAiAfZ1U67CAPKM2+/8MvVV9f3P+ed8RDgvhXUtTo3hpERyrcAghJEAQaDDIxNjg2OTYxMjU2NiIMcjM0MSL1baRHge7MKrkC+Z2hey1aa0rx1ZazgwqFAeIFmTwgxmnM8oGNRH0pZBgzRup9dIWGNuXBlZ2QJ2x70jEpIhdjtMnPYt3qu9x73oXhFHc1cs+C3ukt3kgBXn79IkRoQ2cS89X9HWT8Gwswmd20d9/dBYT/uaYDjr/A4MIQ65MYeHGv8rK5B4iIbKb064t+XEYrZMUiMbkh0l4Fx7VcS1x3RbmEGOqOMkJxgutWSZAH2gSLRRE5R563N0TYwqZJKARVu9ODKdZ6NJwiyFZ0fefu81UGxifHfQ2Lcvd3oykYxjQGMeIBMgk2rx3G2uyIIRIWElWcb10DwBRr2by6bfk/hwpTkQ7DhE1jE3V/7TUUYNXC0ivZcXRsBKp281LxAaRqMDL3WtFI87b3KejSDq2sekj5fK64PdXblBcXDnN8OhPWyzCjq/6xBjqfAXQahMM48BYX/nympsgQ2Z4KH60jO9X0tnho5fyStdToV6jThW6c2qEbwK4m0+M38HJjIlz2n/5BnE9ya4Ibo3jmmnMT0ZwES9srmmsmQTbASpgMwfzXr+ezaE9svGDoT0/wP55Gba5USj1I3YO3cR6ztXS75AMS8YfWBTcAxlQaXeq+Of4uUcOHbeakd5nVe+pbJsS9KU/K6fZA0ul9gw==\", \"AWS_XRAY_CONTEXT_MISSING\"=>\"LOG_ERROR\", \"RUBYLIB\"=>\"/var/runtime/gems/aws_lambda_ric-3.0.0/lib:/var/task:/var/runtime/lib:/opt/ruby/lib\", \"_AWS_XRAY_DAEMON_PORT\"=>\"2000\", \"_X_AMZN_TRACE_ID\"=>\"Root=1-663f95a3-080e1f741e2f99f47dc7dd08;Parent=202eacb927932ce5;Sampled=0;Lineage=c0d2ea93:0\"}"

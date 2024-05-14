@@ -9,6 +9,9 @@ GEM
       aws-partitions (~> 1, >= 1.651.0)
       aws-sigv4 (~> 1.8)
       jmespath (~> 1, >= 1.6.1)
+    aws-sdk-iam (1.97.0)
+      aws-sdk-core (~> 3, >= 3.193.0)
+      aws-sigv4 (~> 1.1)
     aws-sdk-sts (1.11.0)
       aws-sdk-core (~> 3, >= 3.110.0)
       aws-sigv4 (~> 1.1)
@@ -131,6 +134,7 @@ PLATFORMS
   x86_64-linux
 
 DEPENDENCIES
+  aws-sdk-iam (~> 1.97)
   aws-sdk-sts (~> 1.11)
   linzer (~> 0.6)
   pry (~> 0.14.2)

@@ -114,10 +114,25 @@ RSpec.describe "Kekse service" do
       expect(last_response.body).to   match(/Bad Request/)
     end
 
-    # also add a test case for a challenge with future time and reject it
     it "should succeed with a good signature from known key" do
       key = SSHData::PrivateKey::ED25519.generate
+      iam_client = Kekse::Aws.iam_stub_client
+      sts_client = Kekse::Aws.sts_stub_client
+
       app.settings.known_keys << key.public_key.fingerprint
+      roles = [
+        Aws::IAM::Types::Role.new(path: "/", role_name: "Admin"),
+        Aws::IAM::Types::Role.new(path: "/", role_name: "ReadOnly")
+      ]
+      stubbed_list_roles = Aws::IAM::Types::ListRolesResponse.new(roles: roles)
+      iam_client.stub_responses(:list_roles, stubbed_list_roles)
+      app.settings.iam = iam_client
+
+      dummy_account = "001122334455"
+      stubbed_caller_identity =
+        Aws::STS::Types::GetCallerIdentityResponse.new(account: dummy_account)
+      sts_client.stub_responses(:get_caller_identity, stubbed_caller_identity)
+      app.settings.sts = sts_client
 
       challenge = Kekse::Challenge.new
       signature = Kekse::Utils.openssh_signature(key, challenge.to_s)
@@ -130,7 +145,7 @@ RSpec.describe "Kekse service" do
       post "/console", params
       expect(last_response).to        be_ok
       expect(last_response.status).to eq(200)
-      expect(last_response.body).to   eq("signed")
+      expect(last_response.body).to   match(/Roles/)
     end
 
     it "should fail with a good signature from known key but wrong message" do
@@ -171,6 +186,85 @@ RSpec.describe "Kekse service" do
       expect(last_response.status).to eq(400)
       expect(last_response.body).to   match(/Bad Request/)
     end
+
+    it "should fail when dependencies are not available" do
+      key = SSHData::PrivateKey::ED25519.generate
+      iam_client = Kekse::Aws.iam_stub_client
+      sts_client = Kekse::Aws.sts_stub_client
+
+      app.settings.known_keys << key.public_key.fingerprint
+
+      access_denied_error = Aws::IAM::Errors::AccessDenied.new(nil, "foo")
+      network_error = Seahorse::Client::NetworkingError.new(Net::ReadTimeout.new)
+      errors = [access_denied_error, network_error]
+      iam_client.stub_responses(:list_roles, errors.sample)
+
+      app.settings.iam = iam_client
+
+      dummy_account = "001122334455"
+      stubbed_caller_identity =
+        Aws::STS::Types::GetCallerIdentityResponse.new(account: dummy_account)
+      sts_client.stub_responses(:get_caller_identity, stubbed_caller_identity)
+      app.settings.sts = sts_client
+
+      challenge = Kekse::Challenge.new
+      signature = Kekse::Utils.openssh_signature(key, challenge.to_s)
+
+      params = {
+        "challenge"      => challenge.to_s,
+        "user_signature" => Base64.strict_encode64(signature.to_pem)
+      }
+
+      post "/console", params
+      expect(last_response).to_not    be_ok
+      expect(last_response.status).to eq(500)
+      expect(last_response.body).to   match(/Internal Server Error/)
+    end
+  end
+
+  context "requesting role data for federated console access" do
+    it "should fail when no signature is given" do
+      get "/console/role/foobar", {}
+      expect(last_response).to_not    be_ok
+      expect(last_response.status).to eq(400)
+      expect(last_response.body).to   match(/Bad Request/)
+    end
+
+    it "should fail when signature is not found" do
+      signature = Digest::SHA512.hexdigest("whatever")
+      get "/console/role/foobar", {"signature" => signature}
+      expect(last_response).to_not    be_ok
+      expect(last_response.status).to eq(400)
+      expect(last_response.body).to   match(/Bad Request/)
+    end
+
+    it "should fail if no signature but an invalid parameter is given" do
+      get "/console/role/app", {"invalid" => "42"}
+      expect(last_response).to_not    be_ok
+      expect(last_response.status).to eq(400)
+      expect(last_response.body).to   match(/Bad Request/)
+    end
+
+    it "should fail if extraneous parameter is given" do
+      signature = Digest::SHA512.hexdigest("whatever")
+      get "/console/role/admin", {"signature" => signature, "invalid" => "42"}
+      expect(last_response).to_not    be_ok
+      expect(last_response.status).to eq(400)
+      expect(last_response.body).to   match(/Bad Request/)
+    end
+
+    it "should fail if bad signature is given" do
+      bad_signature = "crap"
+      get "/console/role/admin", {"signature" => bad_signature}
+      expect(last_response).to_not    be_ok
+      expect(last_response.status).to eq(400)
+      expect(last_response.body).to   match(/Bad Request/)
+    end
+
+    # iam error => error 500
+    # iam role not found => error 400
+    # valid signature and found role => 200 (role data and button for post form)
+    # #<struct Aws::IAM::Types::Role path=\"/\", role_name=\"AdminRole-AdminRole-19H8ZDODHGVK4\", role_id=\"AROATE7TPVQLIJNBB7O7S\", arn=\"arn:aws:iam::216869612566:role/AdminRole-AdminRole-19H8ZDODHGVK4\", create_date=2020-07-13 17:39:35 UTC, assume_role_policy_document=\"%7B%22Version%22%3A%222012-10-17%22%2C%22Statement%22%3A%5B%7B%22Effect%22%3A%22Allow%22%2C%22Principal%22%3A%7B%22AWS%22%3A%22arn%3Aaws%3Aiam%3A%3A216869612566%3Aroot%22%7D%2C%22Action%22%3A%22sts%3AAssumeRole%22%7D%5D%7D\", description=\"\", max_session_duration=3600, permissions_boundary=nil, tags=[], role_last_used=#<struct Aws::IAM::Types::RoleLastUsed last_used_date=2024-05-11 23:13:18 UTC, region=\"eu-west-1\">>"
   end
 
   context "with credentials" do
