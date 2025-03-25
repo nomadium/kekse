@@ -1,16 +1,14 @@
 require "sinatra"
 
 require_relative "helpers"
+require_relative "middlewares/signature"
 
-before do
-  reject 401, :unauthorized if unauthorized?
-end
+use Rack::Auth::Signature, except: "/hello"
 
 get "/hello" do
   erb :hello
 end
 
 get "/role" do
-  # reject 400, :bad_request if some_error?
   "protected"
 end
