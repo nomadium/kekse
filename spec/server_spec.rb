@@ -24,11 +24,7 @@ RSpec.describe "Kekse service" do
       send verb, "/whatever"
       expect(last_response).to_not           be_ok
       expect(last_response.status).to        eq(401)
-      if last_request.head?
-        expect(last_response.body.empty?).to eq(true)
-      else
-        expect(last_response.body).to        match(/Unauthorized/)
-      end
+      expect(last_response.body.empty?).to eq(true)
     end
   end
 
