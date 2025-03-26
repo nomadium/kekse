@@ -9,6 +9,5 @@ require "standard/rake"
 task default: %i[spec standard]
 
 task :dev do
-  system "PUBKEY=\"yrPIlkwBSd7u2J+r3QaVOpNHimigorfOOYKwHV6MihA=\" \
-    rerun --ignore 'app/views/*' \"bundle exec rackup app/config.ru\""
+  system "rerun --ignore 'app/views/*' 'bundle exec rackup app/config.ru'"
 end
